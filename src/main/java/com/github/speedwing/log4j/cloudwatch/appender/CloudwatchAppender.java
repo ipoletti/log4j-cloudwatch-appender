@@ -1,6 +1,7 @@
 package com.github.speedwing.log4j.cloudwatch.appender;
 
 
+import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.logs.AWSLogsClient;
 import com.amazonaws.services.logs.model.*;
 
@@ -50,11 +51,27 @@ public class CloudwatchAppender extends AppenderSkeleton {
      * The maximum number of log entries to send in one go to the AWS Cloudwatch Log service
      */
     private int messagesBatchSize = 128;
+    
+    /**
+     * Delay time in thread between each check&send operation 
+     */
+    private long millisBetweenChecks = 200;
 
+    /**
+     * Optional AWS AccessKeyId. IF empty: http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html
+     */
+    private String awsAccesKeyId;
+    
+    /**
+     * Optional AWS SecretKey. IF empty: http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html
+     */
+    private String awsSecretKey;
+    
     private AtomicBoolean cloudwatchAppenderInitialised = new AtomicBoolean(false);
 
     public CloudwatchAppender() {
         super();
+        this.shutdownHook();
     }
 
     public CloudwatchAppender(Layout layout, String logGroupName, String logStreamName) {
@@ -63,9 +80,21 @@ public class CloudwatchAppender extends AppenderSkeleton {
         this.setLogGroupName(logGroupName);
         this.setLogStreamName(logStreamName);
         this.activateOptions();
+        this.shutdownHook();
     }
 
-    public void setLogGroupName(String logGroupName) {
+    private void shutdownHook() {
+    	Runtime.getRuntime().addShutdownHook(new Thread() {
+
+			@Override
+			public void run() {
+				CloudwatchAppender.this.close();
+			}
+    		
+    	});
+	}
+
+	public void setLogGroupName(String logGroupName) {
         this.logGroupName = logGroupName;
     }
 
@@ -80,8 +109,20 @@ public class CloudwatchAppender extends AppenderSkeleton {
     public void setMessagesBatchSize(int messagesBatchSize) {
         this.messagesBatchSize = messagesBatchSize;
     }
+    
+    public void setMillisBetweenChecks(long millisBetweenChecks) {
+		this.millisBetweenChecks = millisBetweenChecks;
+	}
+    
+	public void setAwsAccesKeyId(String awsAccesKeyId) {
+		this.awsAccesKeyId = awsAccesKeyId;
+	}
 
-    @Override
+	public void setAwsSecretKey(String awsSecretKey) {
+		this.awsSecretKey = awsSecretKey;
+	}
+
+	@Override
     protected void append(LoggingEvent event) {
         if (cloudwatchAppenderInitialised.get()) {
             loggingEventsQueue.offer(event);
@@ -142,7 +183,7 @@ public class CloudwatchAppender extends AppenderSkeleton {
         }
     }
 
-    @Override
+	@Override
     public boolean requiresLayout() {
         return true;
     }
@@ -154,7 +195,14 @@ public class CloudwatchAppender extends AppenderSkeleton {
             Logger.getRootLogger().error("Could not initialise CloudwatchAppender because either or both LogGroupName(" + logGroupName + ") and LogStreamName(" + logStreamName + ") are null or empty");
             this.close();
         } else {
-            this.awsLogsClient = new AWSLogsClient();
+            if (awsAccesKeyId!=null && awsSecretKey!=null) {
+            	this.awsLogsClient = new AWSLogsClient(new BasicAWSCredentials(this.awsAccesKeyId, this.awsSecretKey));
+            }
+            else {
+            	this.awsLogsClient = new AWSLogsClient();
+            }
+            
+            
             loggingEventsQueue = new LinkedBlockingQueue<>(queueLength);
             try {
                 initializeCloudwatchResources();
@@ -179,7 +227,7 @@ public class CloudwatchAppender extends AppenderSkeleton {
 	                    if (loggingEventsQueue.size() > 0) {
 	                        sendMessages();
 	                    }
-	                    Thread.sleep(20L);
+	                    Thread.sleep(millisBetweenChecks);
 	                } catch (InterruptedException e) {
 	                    if (DEBUG_MODE) {
 	                        e.printStackTrace();
@@ -188,7 +236,9 @@ public class CloudwatchAppender extends AppenderSkeleton {
 	            }
 			}
 		};
-		new Thread(r).start();
+		Thread thread = new Thread(r, CloudwatchAppender.class.getName());
+		thread.setDaemon(true);
+		thread.start();
     }
 
     private void initializeCloudwatchResources() {

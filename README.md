@@ -48,6 +48,11 @@ log4j.appender.CloudW.logStreamName=MyLogStreamName
 log4j.appender.CloudW.queueLength=2048
 log4j.appender.CloudW.messagesBatchSize=512
 
+# New parameters (optional)
+log4j.appender.CloudW.awsAccesKeyId=AKIXXXXXXXXXXXXXXXXX
+log4j.appender.CloudW.awsSecretKey=Ey8XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+log4j.appender.CloudW.millisBetweenChecks=500
+
 log4j.rootLogger=INFO, CloudW
 ```
 
@@ -71,4 +76,15 @@ The default value for `messagesBatchSize` is 128
 
 ### The log4j.debug flag
 The `CloudwatchAppender` honors the `log4j.debug` flag and will print extra logging info on the standard out / err.
+
+### The awsAccesKeyId parameter
+Optional AWS AccessKeyId. IF empty: http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html
+
+### The awsSecretKey parameter
+Optional AWS SecretKey. IF empty: http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html
+
+### The millisBetweenChecks parameter
+Delay time in thread between each check&send operation
+Default value 200 ms.
+
   
